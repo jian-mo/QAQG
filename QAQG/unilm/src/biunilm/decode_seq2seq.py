@@ -22,7 +22,10 @@ from pytorch_pretrained_bert.modeling import BertForSeq2SeqDecoder
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 from nn.data_parallel import DataParallelImbalance
-import biunilm.seq2seq_loader as seq2seq_loader
+import seq2seq_loader
+
+import pydevd_pycharm
+# pydevd_pycharm.settrace('localhost', port=12346, stdoutToServer=True, stderrToServer=True)
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -101,7 +104,7 @@ def main():
     parser.add_argument('--need_score_traces', action='store_true')
     parser.add_argument('--ngram_size', type=int, default=3)
     parser.add_argument('--mode', default="s2s",
-                        choices=["s2s", "l2r", "both"])
+                        choices=["s2s", "l2r", "both","2in1","a2q","q2a","c2a","c2q"])
     parser.add_argument('--max_tgt_length', type=int, default=128,
                         help="maximum length of target sequence")
     parser.add_argument('--s2s_special_token', action='store_true',
@@ -139,7 +142,7 @@ def main():
     pair_num_relation = 0
     bi_uni_pipeline = []
     bi_uni_pipeline.append(seq2seq_loader.Preprocess4Seq2seqDecoder(list(tokenizer.vocab.keys()), tokenizer.convert_tokens_to_ids, args.max_seq_length, max_tgt_length=args.max_tgt_length, new_segment_ids=args.new_segment_ids,
-                                                                    mode="s2s", num_qkv=args.num_qkv, s2s_special_token=args.s2s_special_token, s2s_add_segment=args.s2s_add_segment, s2s_share_segment=args.s2s_share_segment, pos_shift=args.pos_shift))
+                                                                    mode=args.mode, num_qkv=args.num_qkv, s2s_special_token=args.s2s_special_token, s2s_add_segment=args.s2s_add_segment, s2s_share_segment=args.s2s_share_segment, pos_shift=args.pos_shift))
 
     amp_handle = None
     if args.fp16 and args.amp:
@@ -151,8 +154,24 @@ def main():
     cls_num_labels = 2
     type_vocab_size = 6 + \
         (1 if args.s2s_add_segment else 0) if args.new_segment_ids else 2
-    mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
-        ["[MASK]", "[SEP]", "[S2S_SOS]"])
+    if args.mode == "a2q":
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+                ["[MASK]", "[SEP]", "[SEP_1]"])
+    elif args.mode == "q2a":
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+                ["[MASK]", "[SEP]", "[SEP_2]"])
+    elif args.mode == "c2q":
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+                ["[MASK]", "[SEP]", "[SEP_6]"])
+    elif args.mode == "c2a":
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+                ["[MASK]", "[SEP]", "[SEP_7]"])
+    elif args.mode == "2in1":
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+            ["[MASK]", "[SEP]", "[SEP_0]"])
+    else:
+        mask_word_id, eos_word_ids, sos_word_id = tokenizer.convert_tokens_to_ids(
+            ["[MASK]", "[SEP]", "[S2S_SOS]"])
     forbid_ignore_set = None
     if args.forbid_ignore_word:
         w_list = []
@@ -188,7 +207,7 @@ def main():
                 input_lines = input_lines[:args.subset]
         data_tokenizer = WhitespaceTokenizer() if args.tokenized_input else tokenizer
         input_lines = [data_tokenizer.tokenize(
-            x)[:max_src_length] for x in input_lines]
+            x)[-max_src_length:] for x in input_lines]
         input_lines = sorted(list(enumerate(input_lines)),
                              key=lambda x: -len(x[1]))
         output_lines = [""] * len(input_lines)
@@ -224,10 +243,13 @@ def main():
                         output_buf = tokenizer.convert_ids_to_tokens(w_ids)
                         output_tokens = []
                         for t in output_buf:
-                            if t in ("[SEP]", "[PAD]"):
+                            if t in ("[SEP]", "[PAD]","[S2S_SEP]"):
+                                pass
                                 break
                             output_tokens.append(t)
                         output_sequence = ' '.join(detokenize(output_tokens))
+                        print(output_sequence)
+
                         output_lines[buf_id[i]] = output_sequence
                         if args.need_score_traces:
                             score_trace_list[buf_id[i]] = {
@@ -239,6 +261,7 @@ def main():
             fn_out = model_recover_path+'.'+args.split
         with open(fn_out, "w", encoding="utf-8") as fout:
             for l in output_lines:
+
                 fout.write(l)
                 fout.write("\n")
 

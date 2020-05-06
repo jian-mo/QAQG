@@ -20,11 +20,18 @@ from torch.utils.data.distributed import DistributedSampler
 
 from pytorch_pretrained_bert.tokenization import BertTokenizer, WhitespaceTokenizer
 from pytorch_pretrained_bert.modeling import BertForPreTrainingLossMask
+from pytorch_pretrained_bert.modeling import BertForMultiLoss
 from pytorch_pretrained_bert.optimization import BertAdam, warmup_linear
 
 from nn.data_parallel import DataParallelImbalance
-import biunilm.seq2seq_loader as seq2seq_loader
+import seq2seq_loader
+
+# import seq2seq_loader_old as seq2seq_loader
 import torch.distributed as dist
+
+import pydevd_pycharm
+from pydevd_file_utils import setup_client_server_paths
+# pydevd_pycharm.settrace('localhost', port=12346, stdoutToServer=True, stderrToServer=True)
 
 
 logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
@@ -214,6 +221,10 @@ def main():
     parser.add_argument('--pos_shift', action='store_true',
                         help="Using position shift for fine-tuning.")
 
+    parser.add_argument('--mode', default="s2s",choices=["s2s", "l2r", "both","a2q","q2a","2in1","double_s2s","triple_s2s","c2q", "c2a", "Q-AQ", "A-QA","double_joint"],
+                        help="training mode,s2s is default, 2in1 is concat answer and question as output context as input")
+
+
     args = parser.parse_args()
 
     assert Path(args.model_recover_path).exists(
@@ -272,9 +283,7 @@ def main():
 
     if args.do_train:
         print("Loading Train Dataset", args.data_dir)
-        bi_uni_pipeline = [seq2seq_loader.Preprocess4Seq2seq(args.max_pred, args.mask_prob, list(tokenizer.vocab.keys(
-
-        )), tokenizer.convert_tokens_to_ids, args.max_seq_length, new_segment_ids=args.new_segment_ids, truncate_config={'max_len_a': args.max_len_a, 'max_len_b': args.max_len_b, 'trunc_seg': args.trunc_seg, 'always_truncate_tail': args.always_truncate_tail}, mask_source_words=args.mask_source_words, skipgram_prb=args.skipgram_prb, skipgram_size=args.skipgram_size, mask_whole_word=args.mask_whole_word, mode="s2s", has_oracle=args.has_sentence_oracle, num_qkv=args.num_qkv, s2s_special_token=args.s2s_special_token, s2s_add_segment=args.s2s_add_segment, s2s_share_segment=args.s2s_share_segment, pos_shift=args.pos_shift)]
+        bi_uni_pipeline = [seq2seq_loader.Preprocess4Seq2seq(args.max_pred, args.mask_prob, list(tokenizer.vocab.keys()),tokenizer.convert_tokens_to_ids, args.max_seq_length, new_segment_ids=args.new_segment_ids, truncate_config={'max_len_a': args.max_len_a, 'max_len_b': args.max_len_b, 'trunc_seg': args.trunc_seg, 'always_truncate_tail': args.always_truncate_tail}, mask_source_words=args.mask_source_words, skipgram_prb=args.skipgram_prb, skipgram_size=args.skipgram_size, mask_whole_word=args.mask_whole_word, mode=args.mode, has_oracle=args.has_sentence_oracle, num_qkv=args.num_qkv, s2s_special_token=args.s2s_special_token, s2s_add_segment=args.s2s_add_segment, s2s_share_segment=args.s2s_share_segment, pos_shift=args.pos_shift)]
         file_oracle = None
         if args.has_sentence_oracle:
             file_oracle = os.path.join(args.data_dir, 'train.oracle')
@@ -284,6 +293,9 @@ def main():
             args.data_dir, args.tgt_file if args.tgt_file else 'train.tgt')
         train_dataset = seq2seq_loader.Seq2SeqDataset(
             fn_src, fn_tgt, args.train_batch_size, data_tokenizer, args.max_seq_length, file_oracle=file_oracle, bi_uni_pipeline=bi_uni_pipeline)
+        #debug preprocess function
+        # next(iter(train_dataset))
+
         if args.local_rank == -1:
             train_sampler = RandomSampler(train_dataset, replacement=False)
             _batch_size = args.train_batch_size
@@ -335,7 +347,19 @@ def main():
             model_recover = torch.load(
                 args.model_recover_path, map_location='cpu')
             global_step = 0
-        model = BertForPreTrainingLossMask.from_pretrained(
+        if args.mode in ["double_s2s","triple_s2s", "Q-AQ", "A-QA","double_joint"]:
+
+            model = BertForMultiLoss.from_pretrained(
+                args.bert_model, state_dict=model_recover, num_labels=cls_num_labels, num_rel=0,
+                type_vocab_size=type_vocab_size, config_path=args.config_path, task_idx=3,
+                num_sentlvl_labels=num_sentlvl_labels, max_position_embeddings=args.max_position_embeddings,
+                label_smoothing=args.label_smoothing, fp32_embedding=args.fp32_embedding,
+                relax_projection=relax_projection, new_pos_ids=args.new_pos_ids, ffn_type=args.ffn_type,
+                hidden_dropout_prob=args.hidden_dropout_prob,
+                attention_probs_dropout_prob=args.attention_probs_dropout_prob, num_qkv=args.num_qkv,
+                seg_emb=args.seg_emb,loss_mode=args.mode)
+        else:
+            model = BertForPreTrainingLossMask.from_pretrained(
             args.bert_model, state_dict=model_recover, num_labels=cls_num_labels, num_rel=0, type_vocab_size=type_vocab_size, config_path=args.config_path, task_idx=3, num_sentlvl_labels=num_sentlvl_labels, max_position_embeddings=args.max_position_embeddings, label_smoothing=args.label_smoothing, fp32_embedding=args.fp32_embedding, relax_projection=relax_projection, new_pos_ids=args.new_pos_ids, ffn_type=args.ffn_type, hidden_dropout_prob=args.hidden_dropout_prob, attention_probs_dropout_prob=args.attention_probs_dropout_prob, num_qkv=args.num_qkv, seg_emb=args.seg_emb)
 
         #apex training?
@@ -426,17 +450,38 @@ def main():
                 train_sampler.set_epoch(i_epoch)
             iter_bar = tqdm(train_dataloader, desc='Iter (loss=X.XXX)',
                             disable=args.local_rank not in (-1, 0))
-            for step, batch in enumerate(iter_bar):
+            loss_counter = 0
+
+            for step, mbatch in enumerate(iter_bar):
                 batch = [
-                    t.to(device) if t is not None else None for t in batch]
+                    t.to(device) if t is not None else None for t in mbatch]
+                loss_sum=0
                 if args.has_sentence_oracle:
                     input_ids, segment_ids, input_mask, mask_qkv, lm_label_ids, masked_pos, masked_weights, is_next, task_idx, oracle_pos, oracle_weights, oracle_labels = batch
+                elif args.mode in ("double_s2s","Q-AQ", "A-QA"):
+                    # input_ids, segment_ids, input_mask, mask_qkv, lm_label_ids, masked_pos, masked_weights, is_next, task_idx =[i[0]  if i is not None else None for i in batch]
+                    # input_ids2, segment_ids2, input_mask2, mask_qkv2, lm_label_ids2, masked_pos2, masked_weights2, is_next2, task_idx2 = [i[1]  if i is not None else None for i in batch]
+                    input=([i[0]  if i is not None else None for i in batch],[i[1]  if i is not None else None for i in batch])
+                    oracle_pos, oracle_weights, oracle_labels = None, None, None
+                elif args.mode =="triple_s2s":
+                    input=([i[0]  if i is not None else None for i in batch],[i[1]  if i is not None else None for i in batch],[i[2]  if i is not None else None for i in batch])
+                    oracle_pos, oracle_weights, oracle_labels = None, None, None
+                elif args.mode =="double_joint":
+                    # input=([i[t] for t in range(len(i))] for i in batch)
+                    input=([i[0]  if i is not None else None for i in batch],[i[1]  if i is not None else None for i in batch],[i[2]  if i is not None else None for i in batch],[i[3]  if i is not None else None for i in batch])
+                    oracle_pos, oracle_weights, oracle_labels = None, None, None
                 else:
                     input_ids, segment_ids, input_mask, mask_qkv, lm_label_ids, masked_pos, masked_weights, is_next, task_idx = batch
                     oracle_pos, oracle_weights, oracle_labels = None, None, None
-                loss_tuple = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next, masked_pos=masked_pos, masked_weights=masked_weights, task_idx=task_idx, masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
-                                   masked_labels_2=oracle_labels, mask_qkv=mask_qkv)
-                masked_lm_loss, next_sentence_loss = loss_tuple
+
+                if args.mode in ("double_s2s","triple_s2s","Q-AQ", "A-QA","double_joint"):
+                    loss_tuple=model(input)
+                    masked_lm_loss, next_sentence_loss= loss_tuple
+
+                else:
+                    loss_tuple = model(input_ids, segment_ids, input_mask, lm_label_ids, is_next, masked_pos=masked_pos, masked_weights=masked_weights, task_idx=task_idx, masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                                       masked_labels_2=oracle_labels, mask_qkv=mask_qkv)
+                    masked_lm_loss, next_sentence_loss = loss_tuple
                 if n_gpu > 1:    # mean() to average on multi-gpu.
                     # loss = loss.mean()
                     masked_lm_loss = masked_lm_loss.mean()

@@ -1,9 +1,10 @@
 #!/bin/bash
 #SBATCH --account=def-lulam50
-#SBATCH --cpus-per-task=14
-#SBATCH --gres=gpu:4              # Number of GPUs (per node)
-#SBATCH --mem=30G                  # memory (per node)
-#SBATCH --time=0-010:00            # time (DD-HH:MM)
+#SBATCH --nodes=1
+#SBATCH --cpus-per-task=6
+#SBATCH --gres=gpu:4             # Number of GPUs (per node)
+#SBATCH --mem=20G                  # memory (per node)
+#SBATCH --time=0-15:00            # time (DD-HH:MM)
 #SBATCH --mail-user=jian.mo.1@ulaval.ca
 #SBATCH --mail-type=FAIL
 source $HOME/ENV/bin/activate

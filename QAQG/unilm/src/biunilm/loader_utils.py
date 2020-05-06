@@ -10,17 +10,62 @@ def get_random_word(vocab_words):
     i = randint(0, len(vocab_words)-1)
     return vocab_words[i]
 
+def single_to_tensor(feature):
+    result_list=[]
+    for x in feature:
+        if x[0] is None:
+            return result_list.append(None)
+        elif isinstance(x[0], torch.Tensor):
+            return result_list.append(torch.stack(x))
+        else:
+            return result_list.append(torch.tensor(x, dtype=torch.long))
 
 def batch_list_to_batch_tensors(batch):
-    batch_tensors = []
-    for x in zip(*batch):
-        if x[0] is None:
-            batch_tensors.append(None)
-        elif isinstance(x[0], torch.Tensor):
-            batch_tensors.append(torch.stack(x))
-        else:
-            batch_tensors.append(torch.tensor(x, dtype=torch.long))
-    return batch_tensors
+    def converter(batch):
+        batch_tensors = []
+        batch =  list(filter(lambda x : x is not None, batch))
+
+        for x in zip(*batch):
+            if x[0] is None :
+                batch_tensors.append(None)
+            elif isinstance(x[0], torch.Tensor):
+                batch_tensors.append(torch.stack(x))
+            else:
+                # print(batch_tensors)
+                try:
+                    batch_tensors.append(torch.tensor(x, dtype=torch.long))
+                except:
+                    return None
+        return batch_tensors
+
+    if isinstance(batch[0], tuple) and len(batch[0]) == 2:
+        list1 = [i[0] for i in batch]
+        list2 = [i[1] for i in batch]
+        tensor1 = converter(list1)
+        tensor2 = converter(list2)
+        return [torch.stack([z[0],z[1]],dim=0) if z[0] is not None else None for z in zip(tensor1,tensor2) ]
+    elif isinstance(batch[0], tuple) and len(batch[0]) == 3:
+        list1 = [i[0] for i in batch]
+        list2 = [i[1] for i in batch]
+        list3= [i[2] for i in batch]
+        tensor1 = converter(list1)
+        tensor2 = converter(list2)
+        tensor3=converter(list3)
+        return [torch.stack([z[0],z[1],z[2]],dim=0) if z[0] is not None else None for z in zip(tensor1,tensor2,tensor3) ]
+    elif isinstance(batch[0], tuple) and len(batch[0]) == 4:
+        list1 = [i[0] for i in batch]
+        list2 = [i[1] for i in batch]
+        list3= [i[2] for i in batch]
+        list4= [i[3] for i in batch]
+        tensor1 = converter(list1)
+        tensor2 = converter(list2)
+        tensor3=converter(list3)
+        tensor4=converter(list4)
+
+        return [torch.stack([z[0],z[1],z[2],z[3]],dim=0) if z[0] is not None else None for z in zip(tensor1,tensor2,tensor3,tensor4) ]
+    else:
+        return converter(batch)
+
 
 
 class TrieNode(object):

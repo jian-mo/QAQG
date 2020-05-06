@@ -25,7 +25,7 @@ from .file_utils import cached_path
 from .loss import LabelSmoothingLoss
 
 logger = logging.getLogger(__name__)
-#https://s3.amazonaws.com/ to ssh local port 4434
+# https://s3.amazonaws.com/ to ssh local port 4434
 PRETRAINED_MODEL_ARCHIVE_MAP = {
     'bert-base-uncased': "http://localhost:8000/models.huggingface.co/bert/bert-base-uncased.tar.gz",
     'bert-large-uncased': "http://localhost:8000/models.huggingface.co/bert/bert-large-uncased.tar.gz",
@@ -164,6 +164,7 @@ try:
 except ImportError:
     print("Better speed can be achieved with apex installed from https://www.github.com/nvidia/apex.")
 
+
     class BertLayerNorm(nn.Module):
         def __init__(self, hidden_size, eps=1e-5):
             """Construct a layernorm module in the TF style (epsilon inside the square root).
@@ -219,7 +220,7 @@ class BertEmbeddings(nn.Module):
         else:
             self.num_pos_emb = 1
         self.position_embeddings = nn.Embedding(
-            config.max_position_embeddings, config.hidden_size*self.num_pos_emb)
+            config.max_position_embeddings, config.hidden_size * self.num_pos_emb)
 
         # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
         # any TensorFlow checkpoint file
@@ -271,11 +272,11 @@ class BertSelfAttention(nn.Module):
             self.num_qkv = 1
 
         self.query = nn.Linear(
-            config.hidden_size, self.all_head_size*self.num_qkv)
+            config.hidden_size, self.all_head_size * self.num_qkv)
         self.key = nn.Linear(config.hidden_size,
-                             self.all_head_size*self.num_qkv)
+                             self.all_head_size * self.num_qkv)
         self.value = nn.Linear(
-            config.hidden_size, self.all_head_size*self.num_qkv)
+            config.hidden_size, self.all_head_size * self.num_qkv)
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
@@ -346,7 +347,7 @@ class BertSelfAttention(nn.Module):
             seg_rep = seg_rep.view(seg_rep.size(0), seg_rep.size(
                 1), self.num_attention_heads, self.attention_head_size)
             qs = torch.einsum('bnih,bjnh->bnij',
-                              query_layer+self.b_q_s, seg_rep)
+                              query_layer + self.b_q_s, seg_rep)
             attention_scores = attention_scores + qs
 
         # attention_scores = attention_scores / math.sqrt(self.attention_head_size)
@@ -369,7 +370,7 @@ class BertSelfAttention(nn.Module):
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[
-            :-2] + (self.all_head_size,)
+                                  :-2] + (self.all_head_size,)
         context_layer = context_layer.view(*new_context_layer_shape)
         return context_layer
 
@@ -484,7 +485,8 @@ class BertEncoder(nn.Module):
         self.layer = nn.ModuleList([copy.deepcopy(layer)
                                     for _ in range(config.num_hidden_layers)])
 
-    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True, prev_embedding=None, prev_encoded_layers=None, mask_qkv=None, seg_ids=None):
+    def forward(self, hidden_states, attention_mask, output_all_encoded_layers=True, prev_embedding=None,
+                prev_encoded_layers=None, mask_qkv=None, seg_ids=None):
         # history embedding and encoded layer must be simultanously given
         assert (prev_embedding is None) == (prev_encoded_layers is None)
 
@@ -566,6 +568,7 @@ class BertLMPredictionHead(nn.Module):
                 return tensor.half()
             else:
                 return tensor
+
         self.type_converter = convert_to_type
         self.converted = False
 
@@ -762,7 +765,11 @@ class PreTrainedBertModel(nn.Module):
         logger.info("Model config {}".format(config))
 
         # clean the arguments in kwargs
-        for arg_clean in ('config_path', 'type_vocab_size', 'relax_projection', 'new_pos_ids', 'task_idx', 'max_position_embeddings', 'fp32_embedding', 'ffn_type', 'label_smoothing', 'hidden_dropout_prob', 'attention_probs_dropout_prob', 'num_qkv', 'seg_emb', 'word_emb_map'):
+        for arg_clean in (
+                'config_path', 'type_vocab_size', 'relax_projection', 'new_pos_ids', 'task_idx',
+                'max_position_embeddings',
+                'fp32_embedding', 'ffn_type', 'label_smoothing', 'hidden_dropout_prob', 'attention_probs_dropout_prob',
+                'num_qkv', 'seg_emb', 'word_emb_map'):
             if arg_clean in kwargs:
                 del kwargs[arg_clean]
 
@@ -789,8 +796,9 @@ class PreTrainedBertModel(nn.Module):
         # initialize new segment embeddings
         _k = 'bert.embeddings.token_type_embeddings.weight'
         if (_k in state_dict) and (config.type_vocab_size != state_dict[_k].shape[0]):
-            logger.info("config.type_vocab_size != state_dict[bert.embeddings.token_type_embeddings.weight] ({0} != {1})".format(
-                config.type_vocab_size, state_dict[_k].shape[0]))
+            logger.info(
+                "config.type_vocab_size != state_dict[bert.embeddings.token_type_embeddings.weight] ({0} != {1})".format(
+                    config.type_vocab_size, state_dict[_k].shape[0]))
             if config.type_vocab_size > state_dict[_k].shape[0]:
                 # state_dict[_k].data = state_dict[_k].data.resize_(config.type_vocab_size, state_dict[_k].shape[1])
                 state_dict[_k].resize_(
@@ -812,16 +820,18 @@ class PreTrainedBertModel(nn.Module):
 
         _k = 'bert.embeddings.position_embeddings.weight'
         n_config_pos_emb = 4 if config.new_pos_ids else 1
-        if (_k in state_dict) and (n_config_pos_emb*config.hidden_size != state_dict[_k].shape[1]):
-            logger.info("n_config_pos_emb*config.hidden_size != state_dict[bert.embeddings.position_embeddings.weight] ({0}*{1} != {2})".format(
-                n_config_pos_emb, config.hidden_size, state_dict[_k].shape[1]))
+        if (_k in state_dict) and (n_config_pos_emb * config.hidden_size != state_dict[_k].shape[1]):
+            logger.info(
+                "n_config_pos_emb*config.hidden_size != state_dict[bert.embeddings.position_embeddings.weight] ({0}*{1} != {2})".format(
+                    n_config_pos_emb, config.hidden_size, state_dict[_k].shape[1]))
             assert state_dict[_k].shape[1] % config.hidden_size == 0
-            n_state_pos_emb = int(state_dict[_k].shape[1]/config.hidden_size)
+            n_state_pos_emb = int(state_dict[_k].shape[1] / config.hidden_size)
             assert (n_state_pos_emb == 1) != (n_config_pos_emb ==
                                               1), "!!!!n_state_pos_emb == 1 xor n_config_pos_emb == 1!!!!"
             if n_state_pos_emb == 1:
                 state_dict[_k].data = state_dict[_k].data.unsqueeze(1).repeat(
-                    1, n_config_pos_emb, 1).reshape((config.max_position_embeddings, n_config_pos_emb*config.hidden_size))
+                    1, n_config_pos_emb, 1).reshape(
+                    (config.max_position_embeddings, n_config_pos_emb * config.hidden_size))
             elif n_config_pos_emb == 1:
                 if hasattr(config, 'task_idx') and (config.task_idx is not None) and (0 <= config.task_idx <= 3):
                     _task_idx = config.task_idx
@@ -833,8 +843,9 @@ class PreTrainedBertModel(nn.Module):
         # initialize new position embeddings
         _k = 'bert.embeddings.position_embeddings.weight'
         if _k in state_dict and config.max_position_embeddings != state_dict[_k].shape[0]:
-            logger.info("config.max_position_embeddings != state_dict[bert.embeddings.position_embeddings.weight] ({0} - {1})".format(
-                config.max_position_embeddings, state_dict[_k].shape[0]))
+            logger.info(
+                "config.max_position_embeddings != state_dict[bert.embeddings.position_embeddings.weight] ({0} - {1})".format(
+                    config.max_position_embeddings, state_dict[_k].shape[0]))
             if config.max_position_embeddings > state_dict[_k].shape[0]:
                 old_size = state_dict[_k].shape[0]
                 # state_dict[_k].data = state_dict[_k].data.resize_(config.max_position_embeddings, state_dict[_k].shape[1])
@@ -844,8 +855,8 @@ class PreTrainedBertModel(nn.Module):
                 while start < config.max_position_embeddings:
                     chunk_size = min(
                         old_size, config.max_position_embeddings - start)
-                    state_dict[_k].data[start:start+chunk_size,
-                                        :].copy_(state_dict[_k].data[:chunk_size, :])
+                    state_dict[_k].data[start:start + chunk_size,
+                    :].copy_(state_dict[_k].data[:chunk_size, :])
                     start += chunk_size
             elif config.max_position_embeddings < state_dict[_k].shape[0]:
                 state_dict[_k].data = state_dict[_k].data[:config.max_position_embeddings, :]
@@ -854,18 +865,20 @@ class PreTrainedBertModel(nn.Module):
         _k = 'cls.predictions.transform.dense.weight'
         n_config_relax = 1 if (config.relax_projection <
                                1) else config.relax_projection
-        if (_k in state_dict) and (n_config_relax*config.hidden_size != state_dict[_k].shape[0]):
-            logger.info("n_config_relax*config.hidden_size != state_dict[cls.predictions.transform.dense.weight] ({0}*{1} != {2})".format(
-                n_config_relax, config.hidden_size, state_dict[_k].shape[0]))
+        if (_k in state_dict) and (n_config_relax * config.hidden_size != state_dict[_k].shape[0]):
+            logger.info(
+                "n_config_relax*config.hidden_size != state_dict[cls.predictions.transform.dense.weight] ({0}*{1} != {2})".format(
+                    n_config_relax, config.hidden_size, state_dict[_k].shape[0]))
             assert state_dict[_k].shape[0] % config.hidden_size == 0
-            n_state_relax = int(state_dict[_k].shape[0]/config.hidden_size)
+            n_state_relax = int(state_dict[_k].shape[0] / config.hidden_size)
             assert (n_state_relax == 1) != (n_config_relax ==
                                             1), "!!!!n_state_relax == 1 xor n_config_relax == 1!!!!"
             if n_state_relax == 1:
                 _k = 'cls.predictions.transform.dense.weight'
                 state_dict[_k].data = state_dict[_k].data.unsqueeze(0).repeat(
-                    n_config_relax, 1, 1).reshape((n_config_relax*config.hidden_size, config.hidden_size))
-                for _k in ('cls.predictions.transform.dense.bias', 'cls.predictions.transform.LayerNorm.weight', 'cls.predictions.transform.LayerNorm.bias'):
+                    n_config_relax, 1, 1).reshape((n_config_relax * config.hidden_size, config.hidden_size))
+                for _k in ('cls.predictions.transform.dense.bias', 'cls.predictions.transform.LayerNorm.weight',
+                           'cls.predictions.transform.LayerNorm.bias'):
                     state_dict[_k].data = state_dict[_k].data.unsqueeze(
                         0).repeat(n_config_relax, 1).view(-1)
             elif n_config_relax == 1:
@@ -876,38 +889,40 @@ class PreTrainedBertModel(nn.Module):
                 _k = 'cls.predictions.transform.dense.weight'
                 state_dict[_k].data = state_dict[_k].data.view(
                     n_state_relax, config.hidden_size, config.hidden_size).select(0, _task_idx)
-                for _k in ('cls.predictions.transform.dense.bias', 'cls.predictions.transform.LayerNorm.weight', 'cls.predictions.transform.LayerNorm.bias'):
+                for _k in ('cls.predictions.transform.dense.bias', 'cls.predictions.transform.LayerNorm.weight',
+                           'cls.predictions.transform.LayerNorm.bias'):
                     state_dict[_k].data = state_dict[_k].data.view(
                         n_state_relax, config.hidden_size).select(0, _task_idx)
 
         # initialize QKV
         _all_head_size = config.num_attention_heads * \
-            int(config.hidden_size / config.num_attention_heads)
+                         int(config.hidden_size / config.num_attention_heads)
         n_config_num_qkv = 1 if (config.num_qkv < 1) else config.num_qkv
         for qkv_name in ('query', 'key', 'value'):
             _k = 'bert.encoder.layer.0.attention.self.{0}.weight'.format(
                 qkv_name)
-            if (_k in state_dict) and (n_config_num_qkv*_all_head_size != state_dict[_k].shape[0]):
+            if (_k in state_dict) and (n_config_num_qkv * _all_head_size != state_dict[_k].shape[0]):
                 logger.info("n_config_num_qkv*_all_head_size != state_dict[_k] ({0}*{1} != {2})".format(
                     n_config_num_qkv, _all_head_size, state_dict[_k].shape[0]))
                 for layer_idx in range(config.num_hidden_layers):
                     _k = 'bert.encoder.layer.{0}.attention.self.{1}.weight'.format(
                         layer_idx, qkv_name)
                     assert state_dict[_k].shape[0] % _all_head_size == 0
-                    n_state_qkv = int(state_dict[_k].shape[0]/_all_head_size)
+                    n_state_qkv = int(state_dict[_k].shape[0] / _all_head_size)
                     assert (n_state_qkv == 1) != (n_config_num_qkv ==
                                                   1), "!!!!n_state_qkv == 1 xor n_config_num_qkv == 1!!!!"
                     if n_state_qkv == 1:
                         _k = 'bert.encoder.layer.{0}.attention.self.{1}.weight'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.unsqueeze(0).repeat(
-                            n_config_num_qkv, 1, 1).reshape((n_config_num_qkv*_all_head_size, _all_head_size))
+                            n_config_num_qkv, 1, 1).reshape((n_config_num_qkv * _all_head_size, _all_head_size))
                         _k = 'bert.encoder.layer.{0}.attention.self.{1}.bias'.format(
                             layer_idx, qkv_name)
                         state_dict[_k].data = state_dict[_k].data.unsqueeze(
                             0).repeat(n_config_num_qkv, 1).view(-1)
                     elif n_config_num_qkv == 1:
-                        if hasattr(config, 'task_idx') and (config.task_idx is not None) and (0 <= config.task_idx <= 3):
+                        if hasattr(config, 'task_idx') and (config.task_idx is not None) and (
+                                0 <= config.task_idx <= 3):
                             _task_idx = config.task_idx
                         else:
                             _task_idx = 0
@@ -948,6 +963,7 @@ class PreTrainedBertModel(nn.Module):
             for name, child in module._modules.items():
                 if child is not None:
                     load(child, prefix + name + '.')
+
         load(model, prefix='' if hasattr(model, 'bert') else 'bert.')
         model.missing_keys = missing_keys
         if len(missing_keys) > 0:
@@ -1006,8 +1022,8 @@ class BertModel(PreTrainedBertModel):
     def rescale_some_parameters(self):
         for layer_id, layer in enumerate(self.encoder.layer):
             layer.attention.output.dense.weight.data.div_(
-                math.sqrt(2.0*(layer_id + 1)))
-            layer.output.dense.weight.data.div_(math.sqrt(2.0*(layer_id + 1)))
+                math.sqrt(2.0 * (layer_id + 1)))
+            layer.output.dense.weight.data.div_(math.sqrt(2.0 * (layer_id + 1)))
 
     def get_extended_attention_mask(self, input_ids, token_type_ids, attention_mask):
         if attention_mask is None:
@@ -1037,14 +1053,16 @@ class BertModel(PreTrainedBertModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, output_all_encoded_layers=True, mask_qkv=None, task_idx=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, output_all_encoded_layers=True,
+                mask_qkv=None, task_idx=None):
         extended_attention_mask = self.get_extended_attention_mask(
             input_ids, token_type_ids, attention_mask)
 
         embedding_output = self.embeddings(
             input_ids, token_type_ids, task_idx=task_idx)
         encoded_layers = self.encoder(embedding_output, extended_attention_mask,
-                                      output_all_encoded_layers=output_all_encoded_layers, mask_qkv=mask_qkv, seg_ids=token_type_ids)
+                                      output_all_encoded_layers=output_all_encoded_layers, mask_qkv=mask_qkv,
+                                      seg_ids=token_type_ids)
         sequence_output = encoded_layers[-1]
         pooled_output = self.pooler(sequence_output)
         if not output_all_encoded_layers:
@@ -1056,7 +1074,8 @@ class BertModelIncr(BertModel):
     def __init__(self, config):
         super(BertModelIncr, self).__init__(config)
 
-    def forward(self, input_ids, token_type_ids, position_ids, attention_mask, output_all_encoded_layers=True, prev_embedding=None,
+    def forward(self, input_ids, token_type_ids, position_ids, attention_mask, output_all_encoded_layers=True,
+                prev_embedding=None,
                 prev_encoded_layers=None, mask_qkv=None, task_idx=None):
         extended_attention_mask = self.get_extended_attention_mask(
             input_ids, token_type_ids, attention_mask)
@@ -1067,7 +1086,8 @@ class BertModelIncr(BertModel):
                                       extended_attention_mask,
                                       output_all_encoded_layers=output_all_encoded_layers,
                                       prev_embedding=prev_embedding,
-                                      prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv, seg_ids=token_type_ids)
+                                      prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv,
+                                      seg_ids=token_type_ids)
         sequence_output = encoded_layers[-1]
         pooled_output = self.pooler(sequence_output)
         if not output_all_encoded_layers:
@@ -1127,9 +1147,11 @@ class BertForPreTraining(PreTrainedBertModel):
             config, self.bert.embeddings.word_embeddings.weight)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, next_sentence_label=None, mask_qkv=None, task_idx=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None,
+                next_sentence_label=None, mask_qkv=None, task_idx=None):
         sequence_output, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
-                                                   output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+                                                   output_all_encoded_layers=False, mask_qkv=mask_qkv,
+                                                   task_idx=task_idx)
         prediction_scores, seq_relationship_score = self.cls(
             sequence_output, pooled_output)
 
@@ -1148,7 +1170,7 @@ class BertForPreTraining(PreTrainedBertModel):
 class BertPreTrainingPairTransform(nn.Module):
     def __init__(self, config):
         super(BertPreTrainingPairTransform, self).__init__()
-        self.dense = nn.Linear(config.hidden_size*2, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size * 2, config.hidden_size)
         self.transform_act_fn = ACT2FN[config.hidden_act] \
             if isinstance(config.hidden_act, str) else config.hidden_act
         # self.LayerNorm = BertLayerNorm(config.hidden_size, eps=1e-5)
@@ -1231,12 +1253,12 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
             base_mask = (index_matrix < num_tokens.view(-1, 1)
                          ).type_as(input_ids)
             segment_a_mask = (
-                index_matrix < num_tokens_a.view(-1, 1)).type_as(input_ids)
+                    index_matrix < num_tokens_a.view(-1, 1)).type_as(input_ids)
 
             token_type_ids = (
-                task_idx + 1 + task_3.type_as(task_idx)).view(-1, 1) * base_mask
+                                     task_idx + 1 + task_3.type_as(task_idx)).view(-1, 1) * base_mask
             token_type_ids = token_type_ids - segment_a_mask * \
-                (task_0 | task_3).type_as(segment_a_mask).view(-1, 1)
+                             (task_0 | task_3).type_as(segment_a_mask).view(-1, 1)
 
             index_matrix = index_matrix.view(1, 1, sequence_length)
             index_matrix_t = index_matrix.view(1, sequence_length, 1)
@@ -1244,12 +1266,13 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
             tril = index_matrix <= index_matrix_t
 
             attention_mask_task_0 = (
-                index_matrix < num_tokens.view(-1, 1, 1)) & (index_matrix_t < num_tokens.view(-1, 1, 1))
+                                            index_matrix < num_tokens.view(-1, 1, 1)) & (
+                                            index_matrix_t < num_tokens.view(-1, 1, 1))
             attention_mask_task_1 = tril & attention_mask_task_0
             attention_mask_task_2 = torch.transpose(
                 tril, dim0=-2, dim1=-1) & attention_mask_task_0
             attention_mask_task_3 = (
-                (index_matrix < num_tokens_a.view(-1, 1, 1)) | tril) & attention_mask_task_0
+                                            (index_matrix < num_tokens_a.view(-1, 1, 1)) | tril) & attention_mask_task_0
 
             attention_mask = (attention_mask_task_0 & task_0.view(-1, 1, 1)) | \
                              (attention_mask_task_1 & task_1.view(-1, 1, 1)) | \
@@ -1257,7 +1280,8 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
                              (attention_mask_task_3 & task_3.view(-1, 1, 1))
             attention_mask = attention_mask.type_as(input_ids)
         sequence_output, pooled_output = self.bert(
-            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv,
+            task_idx=task_idx)
 
         def gather_seq_out_by_pos(seq, pos):
             return torch.gather(seq, 1, pos.unsqueeze(2).expand(-1, -1, seq.size(-1)))
@@ -1271,7 +1295,7 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
             # (batch, num_pair, seq.size(-1))
             mask = mask.type_as(pos_vec)
             pos_vec_masked_sum = (
-                pos_vec * mask.unsqueeze(3).expand_as(pos_vec)).sum(2)
+                    pos_vec * mask.unsqueeze(3).expand_as(pos_vec)).sum(2)
             return pos_vec_masked_sum / mask.sum(2, keepdim=True).expand_as(pos_vec_masked_sum)
 
         def loss_mask_and_normalize(loss, mask):
@@ -1280,6 +1304,7 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
             denominator = torch.sum(mask) + 1e-5
             return (loss / denominator).sum()
 
+        # if no masked words, i.e. pure language model
         if masked_lm_labels is None:
             if masked_pos is None:
                 prediction_scores, seq_relationship_score = self.cls(
@@ -1293,7 +1318,7 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
 
         # masked lm
         sequence_output_masked = gather_seq_out_by_pos(
-            sequence_output, masked_pos)
+            sequence_output, masked_pos)  # get masked words tensors
         prediction_scores_masked, seq_relationship_score = self.cls(
             sequence_output_masked, pooled_output, task_idx=task_idx)
         if self.crit_mask_lm_smoothed:
@@ -1341,7 +1366,7 @@ class BertForPreTrainingLossMask(PreTrainedBertModel):
             pair_x_output_masked, pair_y_output_masked, pair_r, pair_pos_neg_mask)
         pair_loss = loss_mask_and_normalize(
             pair_loss.float(), pair_loss_mask)
-        return masked_lm_loss, next_sentence_loss, pair_loss
+        return masked_lm_loss , next_sentence_loss, pair_loss  #/ float(len(masked_pos))
 
 
 class BertForExtractiveSummarization(PreTrainedBertModel):
@@ -1355,9 +1380,11 @@ class BertForExtractiveSummarization(PreTrainedBertModel):
             config, self.secondary_pred_proj.weight, num_labels=2)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_pos_2=None, masked_weights_2=None, task_idx=None, mask_qkv=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_pos_2=None, masked_weights_2=None,
+                task_idx=None, mask_qkv=None):
         sequence_output, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
-                                                   output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+                                                   output_all_encoded_layers=False, mask_qkv=mask_qkv,
+                                                   task_idx=task_idx)
 
         def gather_seq_out_by_pos(seq, pos):
             return torch.gather(seq, 1, pos.unsqueeze(2).expand(-1, -1, seq.size(-1)))
@@ -1378,7 +1405,8 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
 
     def __init__(self, config, mask_word_id=0, num_labels=2, num_rel=0,
                  search_beam_size=1, length_penalty=1.0, eos_id=0, sos_id=0,
-                 forbid_duplicate_ngrams=False, forbid_ignore_set=None, ngram_size=3, min_len=0, mode="s2s", pos_shift=False):
+                 forbid_duplicate_ngrams=False, forbid_ignore_set=None, ngram_size=3, min_len=0, mode="s2s",
+                 pos_shift=False):
         super(BertForSeq2SeqDecoder, self).__init__(config)
         self.bert = BertModelIncr(config)
         self.cls = BertPreTrainingHeads(
@@ -1400,13 +1428,14 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
         self.forbid_ignore_set = forbid_ignore_set
         self.ngram_size = ngram_size
         self.min_len = min_len
-        assert mode in ("s2s", "l2r")
+        assert mode in ("s2s", "l2r", "2in1", "a2q", "q2a","c2q","c2a")
         self.mode = mode
         self.pos_shift = pos_shift
 
     def forward(self, input_ids, token_type_ids, position_ids, attention_mask, task_idx=None, mask_qkv=None):
         if self.search_beam_size > 1:
-            return self.beam_search(input_ids, token_type_ids, position_ids, attention_mask, task_idx=task_idx, mask_qkv=mask_qkv)
+            return self.beam_search(input_ids, token_type_ids, position_ids, attention_mask, task_idx=task_idx,
+                                    mask_qkv=mask_qkv)
 
         input_shape = list(input_ids.size())
         batch_size = input_shape[0]
@@ -1437,13 +1466,14 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
                 start_pos = next_pos - curr_length
                 x_input_ids = torch.cat((curr_ids, mask_ids), dim=1)
 
-            curr_token_type_ids = token_type_ids[:, start_pos:next_pos+1]
+            curr_token_type_ids = token_type_ids[:, start_pos:next_pos + 1]
             curr_attention_mask = attention_mask[:,
-                                                 start_pos:next_pos+1, :next_pos+1]
-            curr_position_ids = position_ids[:, start_pos:next_pos+1]
+                                  start_pos:next_pos + 1, :next_pos + 1]
+            curr_position_ids = position_ids[:, start_pos:next_pos + 1]
             new_embedding, new_encoded_layers, _ = \
                 self.bert(x_input_ids, curr_token_type_ids, curr_position_ids, curr_attention_mask,
-                          output_all_encoded_layers=True, prev_embedding=prev_embedding, prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv)
+                          output_all_encoded_layers=True, prev_embedding=prev_embedding,
+                          prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv)
 
             last_hidden = new_encoded_layers[-1][:, -1:, :]
             prediction_scores, _ = self.cls(
@@ -1521,11 +1551,12 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
 
             curr_token_type_ids = token_type_ids[:, start_pos:next_pos + 1]
             curr_attention_mask = attention_mask[:,
-                                                 start_pos:next_pos + 1, :next_pos + 1]
+                                  start_pos:next_pos + 1, :next_pos + 1]
             curr_position_ids = position_ids[:, start_pos:next_pos + 1]
             new_embedding, new_encoded_layers, _ = \
                 self.bert(x_input_ids, curr_token_type_ids, curr_position_ids, curr_attention_mask,
-                          output_all_encoded_layers=True, prev_embedding=prev_embedding, prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv)
+                          output_all_encoded_layers=True, prev_embedding=prev_embedding,
+                          prev_encoded_layers=prev_encoded_layers, mask_qkv=mask_qkv)
 
             last_hidden = new_encoded_layers[-1][:, -1:, :]
             prediction_scores, _ = self.cls(
@@ -1534,7 +1565,7 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
                 prediction_scores, dim=-1)
             if forbid_word_mask is not None:
                 log_scores += (forbid_word_mask * -10000.0)
-            if self.min_len and (next_pos-input_length+1 <= self.min_len):
+            if self.min_len and (next_pos - input_length + 1 <= self.min_len):
                 log_scores[:, :, self.eos_id].fill_(-10000.0)
             kk_scores, kk_ids = torch.topk(log_scores, k=K)
             if len(total_scores) == 0:
@@ -1647,7 +1678,7 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
                     cands = set()
                     if len(seq) < n:
                         return []
-                    tail = seq[-(n-1):]
+                    tail = seq[-(n - 1):]
                     if self.forbid_ignore_set and any(tk in self.forbid_ignore_set for tk in tail):
                         return []
                     for i in range(len(seq) - (n - 1)):
@@ -1656,7 +1687,8 @@ class BertForSeq2SeqDecoder(PreTrainedBertModel):
                             if tail[j] != seq[i + j]:
                                 mismatch = True
                                 break
-                        if (not mismatch) and not(self.forbid_ignore_set and (seq[i + n - 1] in self.forbid_ignore_set)):
+                        if (not mismatch) and not (
+                                self.forbid_ignore_set and (seq[i + n - 1] in self.forbid_ignore_set)):
                             cands.add(seq[i + n - 1])
                     return list(sorted(cands))
 
@@ -1802,7 +1834,8 @@ class BertForMaskedLM(PreTrainedBertModel):
             config, self.bert.embeddings.word_embeddings.weight)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, mask_qkv=None, task_idx=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, masked_lm_labels=None, mask_qkv=None,
+                task_idx=None):
         sequence_output, _ = self.bert(input_ids, token_type_ids, attention_mask,
                                        output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
         prediction_scores = self.cls(sequence_output)
@@ -1866,7 +1899,8 @@ class BertForNextSentencePrediction(PreTrainedBertModel):
         self.cls = BertOnlyNSPHead(config)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, next_sentence_label=None, mask_qkv=None, task_idx=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, next_sentence_label=None, mask_qkv=None,
+                task_idx=None):
         _, pooled_output = self.bert(input_ids, token_type_ids, attention_mask,
                                      output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
         seq_relationship_score = self.cls(pooled_output)
@@ -1936,7 +1970,8 @@ class BertForSequenceClassification(PreTrainedBertModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, mask_qkv=None, task_idx=None):
         _, pooled_output = self.bert(
-            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv,
+            task_idx=task_idx)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
 
@@ -2014,7 +2049,8 @@ class BertForMultipleChoice(PreTrainedBertModel):
         flat_token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1))
         flat_attention_mask = attention_mask.view(-1, attention_mask.size(-1))
         _, pooled_output = self.bert(
-            flat_input_ids, flat_token_type_ids, flat_attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+            flat_input_ids, flat_token_type_ids, flat_attention_mask, output_all_encoded_layers=False,
+            mask_qkv=mask_qkv, task_idx=task_idx)
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
         reshaped_logits = logits.view(-1, self.num_choices)
@@ -2083,7 +2119,8 @@ class BertForTokenClassification(PreTrainedBertModel):
 
     def forward(self, input_ids, token_type_ids=None, attention_mask=None, labels=None, mask_qkv=None, task_idx=None):
         sequence_output, _ = self.bert(
-            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv, task_idx=task_idx)
+            input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, mask_qkv=mask_qkv,
+            task_idx=task_idx)
         sequence_output = self.dropout(sequence_output)
         logits = self.classifier(sequence_output)
 
@@ -2166,7 +2203,8 @@ class BertForQuestionAnswering(PreTrainedBertModel):
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
         self.apply(self.init_bert_weights)
 
-    def forward(self, input_ids, token_type_ids=None, attention_mask=None, start_positions=None, end_positions=None, task_idx=None):
+    def forward(self, input_ids, token_type_ids=None, attention_mask=None, start_positions=None, end_positions=None,
+                task_idx=None, input3=None):
         sequence_output, _ = self.bert(
             input_ids, token_type_ids, attention_mask, output_all_encoded_layers=False, task_idx=task_idx)
         logits = self.qa_outputs(sequence_output)
@@ -2192,3 +2230,134 @@ class BertForQuestionAnswering(PreTrainedBertModel):
             return total_loss
         else:
             return start_logits, end_logits
+
+
+class BertForMultiLoss(BertForPreTrainingLossMask):
+
+    def __init__(self, config, *inputs, loss_mode="double_s2s", **kwargs):
+        super(BertForMultiLoss, self).__init__(config, *inputs, **kwargs)
+
+        self.ori_model = BertForPreTrainingLossMask(config, *inputs, **kwargs)
+        self.bert = self.ori_model.bert
+        self.cls = self.ori_model.cls
+        self.num_sentlvl_labels = self.ori_model.num_sentlvl_labels
+        self.num_labels = self.ori_model.num_labels
+        self.num_rel = self.ori_model.num_rel
+        self.cls2 = self.ori_model.cls2
+        self.loss_mode = loss_mode
+
+    def forward(self, input):
+        oracle_pos, oracle_weights, oracle_labels = None, None, None
+
+        input_ids, segment_ids, input_mask, mask_qkv, lm_label_ids, masked_pos, masked_weights, is_next, task_idx = \
+            input[0]
+
+        loss1 = self.ori_model(input_ids, segment_ids, input_mask, lm_label_ids, is_next,
+                               masked_pos=masked_pos, masked_weights=masked_weights, task_idx=task_idx,
+                               masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                               masked_labels_2=oracle_labels, mask_qkv=mask_qkv)
+
+        if len(input)>=2:
+            input_ids2, segment_ids2, input_mask2, mask_qkv2, lm_label_ids2, masked_pos2, masked_weights2, is_next2, task_idx2 = \
+                input[1]
+            loss2 = self.ori_model(input_ids2, segment_ids2, input_mask2, lm_label_ids2, is_next2,
+                                   masked_pos=masked_pos2, masked_weights=masked_weights2, task_idx=task_idx2,
+                                   masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                                   masked_labels_2=oracle_labels, mask_qkv=mask_qkv2)
+        else:
+            loss2=(0,0)
+
+        if len(input)>=3:
+            print("len_input",len(input))
+            input_ids3, segment_ids3, input_mask3, mask_qkv3, lm_label_ids3, masked_pos3, masked_weights3, is_next3, task_idx3 = \
+                input[2]
+            loss3 = self.ori_model(input_ids3, segment_ids3, input_mask3, lm_label_ids3, is_next3,
+                                   masked_pos=masked_pos3, masked_weights=masked_weights3, task_idx=task_idx3,
+                                   masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                                   masked_labels_2=oracle_labels, mask_qkv=mask_qkv3)
+        else:
+            loss3 = (0, 0)
+
+        if  len(input)>=4:
+            input_ids4, segment_ids4, input_mask4, mask_qkv4, lm_label_ids4, masked_pos4, masked_weights4, is_next4, task_idx4 = input[3]
+            loss4 = self.ori_model(input_ids4, segment_ids4, input_mask4, lm_label_ids4, is_next4,
+                                   masked_pos=masked_pos4, masked_weights=masked_weights4, task_idx=task_idx4,
+                                   masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                                   masked_labels_2=oracle_labels, mask_qkv=mask_qkv4)
+        else:
+            loss4 = (0, 0)
+
+        print("loss1,2,3,4:","  ".join([str(i[0].data.item())[:5] if isinstance(i[0],torch.Tensor) else str(i[0]) for i in [loss1,loss2,loss3,loss4]]))
+
+        return (loss1[0] + loss2[0] + loss3[0] + loss4[0], loss1[1] + loss2[1] + loss3[1] + loss4[1])
+
+
+class BertQAQG(PreTrainedBertModel):
+    def __init__(self, config, *inputs, model_mode="both", start_positions=None, end_positions=None, **kwargs):
+        super(BertQAQG, self).__init__(config, *inputs, **kwargs)
+
+        self.ori_model = BertForPreTrainingLossMask(config, *inputs, **kwargs)
+        self.bert = self.ori_model.bert
+        self.cls = self.ori_model.cls
+        self.num_sentlvl_labels = self.ori_model.num_sentlvl_labels
+        self.num_labels = self.ori_model.num_labels
+        self.num_rel = self.ori_model.num_rel
+        self.cls2 = self.ori_model.cls2
+
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.apply(self.init_bert_weights)
+        self.model_mode = model_mode
+
+    def forward(self, input_ids, segment_ids, input_mask, start_positions, end_positions, input_ids2, segment_ids2,
+                input_mask2, mask_ids, masked_pos,
+                masked_weights):  # input_ids2, segment_ids2, input_mask2, mask_qkv, masked_pos, masked_weights
+        oracle_pos, oracle_weights, oracle_labels = None, None, None
+
+        qg_loss = 0
+        qa_loss = 0
+
+        # question generation loss
+        is_next = None
+        task_idx = 3
+        lm_label_ids = None
+        mask_qkv = None
+        if self.model_mode == "qg" or self.model_mode == "both":
+            qg_loss = self.ori_model(input_ids2, segment_ids2, input_mask2, mask_ids, is_next,
+                                     masked_pos=masked_pos, masked_weights=masked_weights, task_idx=task_idx,
+                                     masked_pos_2=oracle_pos, masked_weights_2=oracle_weights,
+                                     masked_labels_2=oracle_labels, mask_qkv=mask_qkv)[0]
+
+
+        # qa loss
+        elif self.model_mode == "qa" or self.model_mode == "both":
+            task_idx = None
+
+            sequence_output, _ = self.bert(
+                input_ids, segment_ids, input_mask, output_all_encoded_layers=False, task_idx=task_idx)
+            logits = self.qa_outputs(sequence_output)
+            start_logits, end_logits = logits.split(1, dim=-1)
+            start_logits = start_logits.squeeze(-1)
+            end_logits = end_logits.squeeze(-1)
+
+            # If we are on multi-GPU, split add a dimension
+            if len(start_positions.size()) > 1:
+                start_positions = start_positions.squeeze(-1)
+            if len(end_positions.size()) > 1:
+                end_positions = end_positions.squeeze(-1)
+            # sometimes the start/end positions are outside our model inputs, we ignore these terms
+            ignored_index = start_logits.size(1)
+            start_positions.clamp_(0, ignored_index)
+            end_positions.clamp_(0, ignored_index)
+
+            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
+            start_loss = loss_fct(start_logits, start_positions)
+            end_loss = loss_fct(end_logits, end_positions)
+            qa_loss = (start_loss + end_loss) / 2
+
+        print("qg_loss:", qg_loss)
+        print("qa_loss:", qa_loss)
+        return qg_loss + qa_loss
+
+# Todo1 iterative adversail inference between QA and QG
+# Todo2 question independent answer selection Training (without question)
+# question: whats the benefit of training two mode in one model
